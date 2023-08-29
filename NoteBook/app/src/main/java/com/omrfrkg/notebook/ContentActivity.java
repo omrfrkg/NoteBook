@@ -36,7 +36,7 @@ import java.util.Calendar;
 
 public class ContentActivity extends AppCompatActivity {
 
-    int sayac = 0;
+    int sayac;
 
     //Gallariye Gitmek İçin
     ActivityResultLauncher<Intent> activityResultLauncher;
@@ -45,8 +45,8 @@ public class ContentActivity extends AppCompatActivity {
     ActivityContentBinding binding;
     Bitmap selectedImage;
     SQLiteDatabase database;
-
     EditText[] editTexts;
+    Intent intent;
 
 
     @Override
@@ -56,21 +56,20 @@ public class ContentActivity extends AppCompatActivity {
         View view = binding.getRoot();
         setContentView(view);
 
-        //binding.imageView.setImageResource(R.drawable.image_not_selected);
+        sayac = 0;
 
         //Create Database
         database = this.openOrCreateDatabase("NotesDB",MODE_PRIVATE,null);
 
         registerLauncher();
 
-        Intent intent = getIntent();
+        intent = getIntent();
         String result = intent.getStringExtra("info");
 
         editTexts = new EditText[] {binding.textNoteContent,binding.textNoteTitle,binding.textNoteDate};
 
 
-
-        if (result.equals("new")){
+        if (result.matches("new")){
             binding.button.setVisibility(View.VISIBLE);
             binding.textNoteDate.setVisibility(View.INVISIBLE);
 
@@ -80,6 +79,46 @@ public class ContentActivity extends AppCompatActivity {
                 editText.setClickable(true);
                 editText.setCursorVisible(true);
             }
+            Bitmap selectImage = BitmapFactory.decodeResource(getApplicationContext().getResources(),R.drawable.select_image);
+            binding.imageView2.setImageBitmap(selectImage);
+            binding.imageView2.setClickable(true);
+        }
+        else if (result.matches("update")){
+            for (EditText editText : editTexts){
+                editText.setFocusable(true);
+                editText.setFocusableInTouchMode(true);
+                editText.setClickable(true);
+                editText.setCursorVisible(true);
+            }
+            binding.button.setText("Update");
+
+            int id = intent.getIntExtra("id",0);
+
+            try {
+                Cursor cursor = database.rawQuery("SELECT * FROM notes WHERE id = ?",new String[]{String.valueOf(id)});
+
+                int notetitleIx = cursor.getColumnIndex("notetitle");
+                int notecontentIx = cursor.getColumnIndex("notecontent");
+                int dateIx = cursor.getColumnIndex("date");
+                int imageIx = cursor.getColumnIndex("image");
+
+                while (cursor.moveToNext()){
+                    binding.textNoteTitle.setText(cursor.getString(notetitleIx));
+                    binding.textNoteContent.setText(cursor.getString(notecontentIx));
+                    binding.textNoteDate.setText(cursor.getString(dateIx));
+
+                    byte[] bytes = cursor.getBlob(imageIx);
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes,0,bytes.length);
+                    binding.imageView2.setImageBitmap(bitmap);
+                }
+
+                cursor.close();
+
+            }
+            catch (Exception e){
+                e.printStackTrace();
+            }
+
         }
         else{
 
@@ -89,7 +128,8 @@ public class ContentActivity extends AppCompatActivity {
                 editText.setClickable(false);
                 editText.setCursorVisible(false);
             }
-            binding.imageView.setClickable(false);
+
+            binding.imageView2.setClickable(false);
 
 
             int id = intent.getIntExtra("id",0);
@@ -111,8 +151,10 @@ public class ContentActivity extends AppCompatActivity {
 
                     byte[] bytes = cursor.getBlob(imageIx);
                     Bitmap bitmap = BitmapFactory.decodeByteArray(bytes,0,bytes.length);
-                    binding.imageView.setImageBitmap(bitmap);
+                    binding.imageView2.setImageBitmap(bitmap);
                 }
+
+                cursor.close();
 
             }
             catch (Exception e){
@@ -134,8 +176,37 @@ public class ContentActivity extends AppCompatActivity {
         String noteTitle = binding.textNoteTitle.getText().toString();
         String noteContent = binding.textNoteContent.getText().toString();
 
+        String result = intent.getStringExtra("info");
+        int id = intent.getIntExtra("id",0);
+
+
         if (noteTitle.isEmpty() || noteContent.isEmpty()){
             Toast.makeText(ContentActivity.this,"These areas cannot be left empty!",Toast.LENGTH_LONG).show();
+        }
+        else if (result.matches("update")){
+            imageViewIsNull(sayac);
+            Bitmap smallImage = makeSmallerImage(selectedImage,300);
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            smallImage.compress(Bitmap.CompressFormat.PNG,50,outputStream);
+            byte[] byteArray = outputStream.toByteArray();
+
+            try {
+                database.execSQL("CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY,notetitle VARCHAR,notecontent VARCHAR,date VARCHAR,image BLOB)");
+
+                String sqlUpdateCommand = "UPDATE notes SET notetitle = ?,notecontent = ?,date = ?,image = ? WHERE id = "+id;
+                SQLiteStatement sqLiteStatement = database.compileStatement(sqlUpdateCommand);
+                sqLiteStatement.bindString(1,noteTitle);
+                sqLiteStatement.bindString(2,noteContent);
+                sqLiteStatement.bindString(3,date);
+                sqLiteStatement.bindBlob(4,byteArray);
+                sqLiteStatement.execute();
+            }catch (Exception e){
+                e.printStackTrace();
+            }
+            Intent intent = new Intent(ContentActivity.this,MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(intent);
         }
         else{
             imageViewIsNull(sayac);
@@ -162,8 +233,6 @@ public class ContentActivity extends AppCompatActivity {
             Intent intent = new Intent(ContentActivity.this,MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
             startActivity(intent);
-
-
         }
 
 
@@ -183,7 +252,7 @@ public class ContentActivity extends AppCompatActivity {
 
          */
 
-        //Boyutları Alınıyor
+        //Sizes
         int width = image.getWidth();
         int height = image.getHeight();
 
@@ -263,20 +332,19 @@ public class ContentActivity extends AppCompatActivity {
                     Intent intenFromResult = result.getData();
                     if (intenFromResult != null){
                         Uri imageData = intenFromResult.getData();
-                        //binding.imageView.setImageURI(imageData);
                         try {
 
                             if (Build.VERSION.SDK_INT >= 28){
                                 ImageDecoder.Source source = ImageDecoder.createSource(ContentActivity.this.getContentResolver(),imageData);
                                 selectedImage = ImageDecoder.decodeBitmap(source);
-                                binding.imageView.setImageBitmap(selectedImage);
-
+                                binding.imageView2.setImageBitmap(selectedImage);
+                                sayac++;
                             }
                             else {
 
                                 selectedImage = MediaStore.Images.Media.getBitmap(ContentActivity.this.getContentResolver(),imageData);
-                                binding.imageView.setImageBitmap(selectedImage);
-
+                                binding.imageView2.setImageBitmap(selectedImage);
+                                sayac++;
                             }
 
                         }catch (Exception e){
@@ -285,21 +353,20 @@ public class ContentActivity extends AppCompatActivity {
                     }
                 }
                 else{
-                    Toast.makeText(ContentActivity.this,"NULLLLLLLL!!!!!!!",Toast.LENGTH_LONG).show();
                     Uri imageData = Uri.parse("android.resource://com.omrfrkg.notebook/drawable/image_not_selected");
 
                     try {
                         if (Build.VERSION.SDK_INT >= 28){
                             ImageDecoder.Source source = ImageDecoder.createSource(ContentActivity.this.getContentResolver(),imageData);
                             selectedImage = ImageDecoder.decodeBitmap(source);
-                            binding.imageView.setImageBitmap(selectedImage);
-
+                            binding.imageView2.setImageBitmap(selectedImage);
+                            sayac++;
                         }
                         else {
 
                             selectedImage = MediaStore.Images.Media.getBitmap(ContentActivity.this.getContentResolver(),imageData);
-                            binding.imageView.setImageBitmap(selectedImage);
-
+                            binding.imageView2.setImageBitmap(selectedImage);
+                            sayac++;
                         }
                     }
                     catch (Exception e){
@@ -335,23 +402,16 @@ public class ContentActivity extends AppCompatActivity {
                 if (Build.VERSION.SDK_INT >= 28){
                     ImageDecoder.Source source = ImageDecoder.createSource(ContentActivity.this.getContentResolver(),imageData);
                     selectedImage = ImageDecoder.decodeBitmap(source);
-                    binding.imageView.setImageBitmap(selectedImage);
-
+                    binding.imageView2.setImageBitmap(selectedImage);
                 }
                 else {
-
                     selectedImage = MediaStore.Images.Media.getBitmap(ContentActivity.this.getContentResolver(),imageData);
-                    binding.imageView.setImageBitmap(selectedImage);
-
+                    binding.imageView2.setImageBitmap(selectedImage);
                 }
             }
             catch (Exception e){
                 e.printStackTrace();
             }
         }
-    }
-    public void clickCounter(View view){
-
-        sayac++;
     }
 }

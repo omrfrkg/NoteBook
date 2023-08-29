@@ -33,11 +33,7 @@ public class MainActivity extends AppCompatActivity {
         View view = binding.getRoot();
         setContentView(view);
 
-
-
-
         notesArrayList = new ArrayList<>();
-
         notesAdapter = new NotesAdapter(notesArrayList);
         binding.recyclerView.setAdapter(notesAdapter);
         binding.recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -63,7 +59,7 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    private void getData(){
+    public void getData(){
         try{
 
             SQLiteDatabase database = this.openOrCreateDatabase("NotesDB",MODE_PRIVATE,null);
@@ -81,8 +77,6 @@ public class MainActivity extends AppCompatActivity {
             }
             notesAdapter.notifyDataSetChanged();
             cursor.close();
-            //Toast.makeText(MainActivity.this,notesArrayList.size()+"dsadasda",Toast.LENGTH_LONG).show();
-
 
         }catch (Exception e){
             e.printStackTrace();
